@@ -90,7 +90,7 @@ async function getTopTagsByNationality() {
   return map;
 }
 
-/** ========= (Opcional) Cargar catálogo de tags: name <-> id ========= **/
+/** ========= Cargar catálogo de tags: name <-> id ========= **/
 async function loadHousingTagCatalog() {
   const snap = await firestore.collection(HOUSING_TAG_COLL).get();
   const nameToId = new Map();
@@ -148,7 +148,7 @@ async function getCandidatePostsByNationality(topTagsByNat, tagCatalog) {
         price: post?.price ?? 0,
         rating: post?.rating ?? 0,
         reviewsCount: post?.reviewsCount ?? 0,       // si no existe, 0
-        photoPath: post?.thumbnail ?? post?.photoPath ?? "" // ajusta si tu thumbnail se llama distinto
+        photoPath: post?.thumbnail ?? post?.photoPath ?? ""
       };
 
       // Para cada nacionalidad: intersección no vacía (match por nombre y por id)
@@ -258,7 +258,6 @@ async function writeRecommendationsForStudents(candidatesByNat) {
           rating: p.rating,
           reviewsCount: p.reviewsCount,
           photoPath: p.photoPath,
-          source: "nationality_job",
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true }); // no borra; upsert
         totalWrites++;
