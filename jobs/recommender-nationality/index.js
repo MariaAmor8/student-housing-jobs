@@ -27,41 +27,51 @@ const bigquery  = new BigQuery({ projectId: PROJECT_ID, location: BQ_LOCATION })
 /** ========= BIGQUERY: Top tags por nacionalidad ========= **/
 async function getTopTagsByNationality() {
   const query = `
-    DECLARE date_from DATE DEFAULT DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY);
-    WITH events AS (
-      SELECT event_date, event_name, event_params, user_properties
-      FROM \`${PROJECT_ID}.${BQ_DATASET}.events_*\`
-      WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', date_from) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
-      UNION ALL
-      SELECT event_date, event_name, event_params, user_properties
-      FROM \`${PROJECT_ID}.${BQ_DATASET}.events_intraday_*\`
-      WHERE event_date BETWEEN FORMAT_DATE('%Y%m%d', date_from) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
-    ),
-    base AS (
-      SELECT
-        (SELECT value.string_value FROM UNNEST(user_properties) WHERE key = 'user_nationality') AS user_nationality,
-        (SELECT value.string_value FROM UNNEST(event_params)    WHERE key = 'housing_category')  AS housing_category
-      FROM events
-      WHERE event_name = 'housing_post_click'
-    ),
-    agg AS (
-      SELECT user_nationality, housing_category, COUNT(*) AS clicks
-      FROM base
-      WHERE user_nationality IS NOT NULL AND housing_category IS NOT NULL
-      GROUP BY 1,2
-    ),
-    ranked AS (
-      SELECT
-        user_nationality,
-        housing_category,
-        clicks,
-        ROW_NUMBER() OVER (PARTITION BY user_nationality ORDER BY clicks DESC) AS rk
-      FROM agg
-    )
-    SELECT user_nationality, housing_category, clicks
-    FROM ranked
-    WHERE rk <= @topN
-  `;
+  DECLARE date_from DATE DEFAULT DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY);
+
+  WITH events AS (
+    SELECT event_date, event_name, event_params, user_properties
+    FROM \`${BQ_PROJECT_ID}.${BQ_DATASET}.events_*\`
+    WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', date_from) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
+    UNION ALL
+    SELECT event_date, event_name, event_params, user_properties
+    FROM \`${BQ_PROJECT_ID}.${BQ_DATASET}.events_intraday_*\`
+    WHERE event_date BETWEEN FORMAT_DATE('%Y%m%d', date_from) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
+  ),
+  base AS (
+    SELECT
+      -- SOLO housing_post_click
+      -- user_nationality y housing_category VIENEN EN event_params, según tu AnalyticsHelper
+      (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'user_nationality') AS user_nationality,
+      (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'housing_category')  AS housing_category
+    FROM events
+    WHERE event_name = 'housing_post_click'
+  ),
+  norm AS (
+    SELECT
+      LOWER(TRIM(user_nationality)) AS user_nationality,
+      LOWER(TRIM(housing_category)) AS housing_category
+    FROM base
+    WHERE user_nationality IS NOT NULL AND housing_category IS NOT NULL
+  ),
+  agg AS (
+    SELECT user_nationality, housing_category, COUNT(*) AS clicks
+    FROM norm
+    GROUP BY 1,2
+  ),
+  ranked AS (
+    SELECT
+      user_nationality,
+      housing_category,
+      clicks,
+      ROW_NUMBER() OVER (PARTITION BY user_nationality ORDER BY clicks DESC) AS rk
+    FROM agg
+  )
+  SELECT user_nationality, housing_category, clicks
+  FROM ranked
+  WHERE rk <= @topN
+`;
+
   const [job]   = await bigquery.createQueryJob({ query, params: { days: DAYS_WINDOW, topN: TOP_TAGS_PER_NAT } });
   const [rows]  = await job.getQueryResults();
 
@@ -85,7 +95,7 @@ async function loadHousingTagCatalog() {
   snap.forEach(doc => {
     const d = doc.data();
     const id = doc.id || d.id;
-    const nm = d?.name;
+    const nm = d?.name ? String(d.name).toLowerCase().trim() : null;
     if (id && nm) {
       nameToId.set(String(nm), String(id));
       idToName.set(String(id), String(nm));
@@ -123,7 +133,7 @@ async function getCandidatePostsByNationality(topTagsByNat, tagCatalog) {
 
       tagSnap.forEach(t => {
         const td = t.data();
-        if (td?.name) tagNames.add(String(td.name));
+        if (td?.name) tagNames.add(String(td.name).toLowerCase().trim());
         if (td?.id)   tagIds.add(String(td.id));
       });
 
