@@ -57,6 +57,8 @@ async function getTopTagsByNationality() {
   agg AS (
     SELECT user_nationality, housing_category, COUNT(*) AS clicks
     FROM norm
+    WHERE user_nationality != 'unknown' AND user_nationality != ''
+      AND housing_category != 'unknown' AND housing_category != ''
     GROUP BY 1,2
   ),
   ranked AS (
@@ -81,6 +83,7 @@ async function getTopTagsByNationality() {
     const nat = r.user_nationality;
     const tag = r.housing_category;
     if (!nat || !tag) continue;
+    if (nat === 'unknown' || tag === 'unknown') continue;
     if (!map.has(nat)) map.set(nat, new Set());
     map.get(nat).add(tag);
   }
@@ -212,7 +215,15 @@ async function writeRecommendationsForStudents(candidatesByNat) {
       const s = stu.data();
       const studentId = s?.id || stu.id;       // usa el campo id si existe; de lo contrario, el doc.id
       const nat       = s?.nationality;
-      if (!studentId || !nat) continue;
+
+      // Añadir un log para ver qué valores se están usando antes del 'continue'
+      console.log(`[DEBUG] Student | docId=${stu.id} s.id=${s?.id} s.nat=${nat}`);
+
+      if (!studentId || !nat) {
+        console.log(`[DEBUG] Skipping Student | studentId=${studentId} nat=${nat}`);
+        continue;
+
+      }
 
       const previews = candidatesByNat.get(nat);
       if (!previews || previews.length === 0) continue;
