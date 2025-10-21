@@ -31,11 +31,11 @@ async function getTopTagsByNationality() {
 
   WITH events AS (
     SELECT event_date, event_name, event_params, user_properties
-    FROM \`${BQ_PROJECT_ID}.${BQ_DATASET}.events_*\`
+    FROM \`${PROJECT_ID}.${BQ_DATASET}.events_*\`
     WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', date_from) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
     UNION ALL
     SELECT event_date, event_name, event_params, user_properties
-    FROM \`${BQ_PROJECT_ID}.${BQ_DATASET}.events_intraday_*\`
+    FROM \`${PROJECT_ID}.${BQ_DATASET}.events_intraday_*\`
     WHERE event_date BETWEEN FORMAT_DATE('%Y%m%d', date_from) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
   ),
   base AS (
