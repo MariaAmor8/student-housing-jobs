@@ -172,15 +172,29 @@ async function getCandidatePostsByNationality(topTagsByNat, tagCatalog) {
   for (const [nat, arr] of outMap.entries()) {
     arr.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     outMap.set(nat, arr.slice(0, POSTS_PER_NAT));
+    console.log(`[JOB] candidates topK | nat=${nat} top=${outMap.get(nat).map(x => x.id).join(",")}`);
+
   }
+
+  for (const [nat, arr] of outMap.entries()) {
+  console.log(`[JOB] candidates raw | nat=${nat} count=${arr.length}`);
+  // Muestra hasta 5 ids para muestreo
+  console.log(`[JOB] sample ids | nat=${nat} -> ${arr.slice(0, 5).map(x => x.id).join(",")}`);
+}
+
   return outMap;
 }
 
 /** ========= Upsert en RecommendedHousingPosts por estudiante =========
- * Recorre StudentUser (id, nationality), resuelve su perfil en StudentUserPorfile por userId,
+ * Recorre StudentUser (id, nationality), resuelve su perfil en StudentUserProfile por userId,
  * y hace upsert de 3 posts (id = housingId, merge=true).
  */
 async function writeRecommendationsForStudents(candidatesByNat) {
+    let totalStudents = 0;
+    let matchedNatStudents = 0;
+    let profilesFound = 0;
+    let profilesMissing = 0;
+
   const pageSize = 300;
   let lastDoc = null;
   let totalWrites = 0;
@@ -193,6 +207,8 @@ async function writeRecommendationsForStudents(candidatesByNat) {
     if (snap.empty) break;
 
     for (const stu of snap.docs) {
+
+        totalStudents++;
       const s = stu.data();
       const studentId = s?.id || stu.id;       // usa el campo id si existe; de lo contrario, el doc.id
       const nat       = s?.nationality;
@@ -200,16 +216,23 @@ async function writeRecommendationsForStudents(candidatesByNat) {
 
       const previews = candidatesByNat.get(nat);
       if (!previews || previews.length === 0) continue;
+      matchedNatStudents++;
 
-      // Resolver perfil en StudentUserPorfile por userId == studentId
+      // Resolver perfil en StudentUserProfile por userId == studentId
       const profSnap = await firestore
         .collection(STUDENT_PROFILE_COLL)
         .where("userId", "==", String(studentId))
         .limit(1)
         .get();
 
-      if (profSnap.empty) continue;
+      if (profSnap.empty) {
+        profilesMissing++;
+        console.log(`[JOB] profile NOT found | userId=${studentId} nat=${nat}`);
+        continue;
+    }
+    profilesFound++;
       const profDoc = profSnap.docs[0];
+      console.log(`[JOB] upserting for userId=${studentId} -> ${previews.map(p => p.id).join(",")}`);
 
       // Batched upserts (máx 500 por batch; aquí solo 3)
       const batch = firestore.batch();
@@ -234,6 +257,7 @@ async function writeRecommendationsForStudents(candidatesByNat) {
     lastDoc = snap.docs[snap.docs.length - 1];
     if (snap.size < pageSize) break;
   }
+  console.log(`[JOB] write summary | studentsScanned=${totalStudents} matchedNat=${matchedNatStudents} profilesFound=${profilesFound} profilesMissing=${profilesMissing} totalUpserts=${totalWrites}`);
 
   return totalWrites;
 }
