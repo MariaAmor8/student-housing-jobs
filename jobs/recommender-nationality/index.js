@@ -214,7 +214,8 @@ async function writeRecommendationsForStudents(candidatesByNat) {
         totalStudents++;
       const s = stu.data();
       const studentId = s?.id || stu.id;       // usa el campo id si existe; de lo contrario, el doc.id
-      const nat       = s?.nationality;
+      const rawNat    = s?.nationality;
+      const nat = rawNat ? String(rawNat).toLowerCase().trim() : null;
 
       // Añadir un log para ver qué valores se están usando antes del 'continue'
       console.log(`[DEBUG] Student | docId=${stu.id} s.id=${s?.id} s.nat=${nat}`);
